@@ -16,13 +16,12 @@ OpenFlow icon from https://www.opennetworking.org/
 import json
 import importlib.util
 from tkinter import filedialog, messagebox
-from tkinter import Tk, Button, filedialog, Entry, Label
+from tkinter import Tk, Button, filedialog, Entry, Label, Text, Scrollbar, Frame, Canvas, Menu, Toplevel, Listbox, END
 from tkinter import Toplevel, Listbox, MULTIPLE, Button, messagebox
 import importlib.util
 import os
 from mininet.net import Mininet
 from mininet.node import Host, OVSSwitch, Controller
-from template_topo import TemplateTopo
 from mininet.net import Mininet
 from mininet.log import info
 from mininet.node import Controller
@@ -1108,7 +1107,7 @@ class MiniEdit( Frame ):
     def __init__( self, parent=None, cheight=600, cwidth=1000 ):
 
         self.net = None  # Inicializa como None
-        self.node_positions = {}  # Armazena as posições dos nós na interface gráfica
+        self.node_positions = {}  # Armazena as posicoes dos nos na interface grafica
 
         self.devices = []
 
@@ -1168,6 +1167,8 @@ class MiniEdit( Frame ):
         self.tools = ( 'Select', 'Host', 'Switch', 'LegacySwitch', 'LegacyRouter', 'NetLink', 'Controller' )
         self.customColors = { 'Switch': 'darkGreen', 'Host': 'blue' }
         self.toolbar = self.createToolbar()
+        
+        
 
         # Layout
         self.toolbar.grid( column=0, row=0, sticky='nsew')
@@ -1175,6 +1176,15 @@ class MiniEdit( Frame ):
         self.columnconfigure( 1, weight=1 )
         self.rowconfigure( 0, weight=1 )
         self.pack( expand=True, fill='both' )
+        
+        # Add dump flows button
+        self.dump_flows_button = Button(self.toolbar, text='Dump Flows', command=self.dump_flows)
+        self.dump_flows_button.pack(fill='x')
+        
+        # Create dump flows panel
+        self.dump_flows_panel = Text(self, wrap='word')
+        self.dump_flows_panel.grid(column=1, row=1, sticky='nsew')
+        self.dump_flows_panel.insert('1.0', 'Flow tables will be displayed here.\n')
 
         # About box
         self.aboutBox = None
@@ -1254,6 +1264,18 @@ class MiniEdit( Frame ):
 
         # Close window gracefully
         Wm.wm_protocol( self.top, name='WM_DELETE_WINDOW', func=self.quit )
+
+    def dump_flows(self):
+        "Dump flow tables for all switches."
+        if self.net is None:
+            showerror(title="Error", message="Network is not running.")
+            return
+        
+        self.dump_flows_panel.delete('1.0', END)
+        for switch in self.net.switches:
+            self.dump_flows_panel.insert(END, f'Flows for switch {switch.name}:\n')
+            flows = switch.dpctl('dump-flows')
+            self.dump_flows_panel.insert(END, flows + '\n')
 
     def quit( self ):
         "Stop our network, if any, then quit."
@@ -1464,19 +1486,27 @@ class MiniEdit( Frame ):
             return text.encode('utf-8')
         return text
 
-    def loadTopology( self ):
+    def loadTopology(self):
         "Load command."
         c = self.canvas
 
         myFormats = [
-            ('Mininet Topology','*.mn'),
-            ('All Files','*'),
+            ('Mininet Topology', '*.mn'),
+            ('All Files', '*'),
         ]
         f = tkFileDialog.askopenfile(filetypes=myFormats, mode='rb')
         if f is None:
             return
         self.newTopology()
-        loadedTopology = dict(json.loads(json.dumps(json.load(f))))
+        
+        # Read the file content and decode it properly
+        file_content = f.read()
+        try:
+            decoded_content = file_content.decode('utf-8')
+        except UnicodeDecodeError:
+            decoded_content = file_content.decode('latin-1')  # Fallback to another encoding if UTF-8 fails
+
+        loadedTopology = dict(json.loads(decoded_content))
 
         # Load application preferences
         if 'application' in loadedTopology:
@@ -1504,7 +1534,7 @@ class MiniEdit( Frame ):
                 self.controllers[hostname]['hostname'] = hostname
                 self.addNode('Controller', 0, float(30), float(30), name=hostname)
                 icon = self.findWidgetByName(hostname)
-                icon.bind('<Button-3>', self.do_controllerPopup )
+                icon.bind('<Button-3>', self.do_controllerPopup)
             else:
                 controllers = loadedTopology['controllers']
                 for controller in controllers:
@@ -1514,14 +1544,13 @@ class MiniEdit( Frame ):
                     self.addNode('Controller', 0, float(x), float(y), name=hostname)
                     self.controllers[hostname] = controller['opts']
                     icon = self.findWidgetByName(hostname)
-                    icon.bind('<Button-3>', self.do_controllerPopup )
-
+                    icon.bind('<Button-3>', self.do_controllerPopup)
 
         # Load hosts
         hosts = loadedTopology['hosts']
         for host in hosts:
             nodeNum = host['number']
-            hostname = 'h'+nodeNum
+            hostname = 'h' + nodeNum
             if 'hostname' in host['opts']:
                 hostname = host['opts']['hostname']
             else:
@@ -1536,20 +1565,20 @@ class MiniEdit( Frame ):
             if 'privateDirectory' in host['opts']:
                 newDirList = []
                 for privateDir in host['opts']['privateDirectory']:
-                    if isinstance( privateDir, list ):
-                        newDirList.append((privateDir[0],privateDir[1]))
+                    if isinstance(privateDir, list):
+                        newDirList.append((privateDir[0], privateDir[1]))
                     else:
                         newDirList.append(privateDir)
                 host['opts']['privateDirectory'] = newDirList
             self.hostOpts[hostname] = host['opts']
             icon = self.findWidgetByName(hostname)
-            icon.bind('<Button-3>', self.do_hostPopup )
+            icon.bind('<Button-3>', self.do_hostPopup)
 
         # Load switches
         switches = loadedTopology['switches']
         for switch in switches:
             nodeNum = switch['number']
-            hostname = 's'+nodeNum
+            hostname = 's' + nodeNum
             if 'controllers' not in switch['opts']:
                 switch['opts']['controllers'] = []
             if 'switchType' not in switch['opts']:
@@ -1565,15 +1594,15 @@ class MiniEdit( Frame ):
             if switch['opts']['switchType'] == "legacyRouter":
                 self.addNode('LegacyRouter', nodeNum, float(x), float(y), name=hostname)
                 icon = self.findWidgetByName(hostname)
-                icon.bind('<Button-3>', self.do_legacyRouterPopup )
+                icon.bind('<Button-3>', self.do_legacyRouterPopup)
             elif switch['opts']['switchType'] == "legacySwitch":
                 self.addNode('LegacySwitch', nodeNum, float(x), float(y), name=hostname)
                 icon = self.findWidgetByName(hostname)
-                icon.bind('<Button-3>', self.do_legacySwitchPopup )
+                icon.bind('<Button-3>', self.do_legacySwitchPopup)
             else:
                 self.addNode('Switch', nodeNum, float(x), float(y), name=hostname)
                 icon = self.findWidgetByName(hostname)
-                icon.bind('<Button-3>', self.do_switchPopup )
+                icon.bind('<Button-3>', self.do_switchPopup)
             self.switchOpts[hostname] = switch['opts']
 
             # create links to controllers
@@ -1581,7 +1610,7 @@ class MiniEdit( Frame ):
                 controllers = self.switchOpts[hostname]['controllers']
                 for controller in controllers:
                     dest = self.findWidgetByName(controller)
-                    dx, dy = self.canvas.coords( self.widgetToItem[ dest ] )
+                    dx, dy = self.canvas.coords(self.widgetToItem[dest])
                     self.link = self.canvas.create_line(float(x),
                                                         float(y),
                                                         dx,
@@ -1589,14 +1618,14 @@ class MiniEdit( Frame ):
                                                         width=4,
                                                         fill='red',
                                                         dash=(6, 4, 2, 4),
-                                                        tag='link' )
-                    c.itemconfig(self.link, tags=c.gettags(self.link)+('control',))
-                    self.addLink( icon, dest, linktype='control' )
+                                                        tag='link')
+                    c.itemconfig(self.link, tags=c.gettags(self.link) + ('control',))
+                    self.addLink(icon, dest, linktype='control')
                     self.createControlLinkBindings()
                     self.link = self.linkWidget = None
             else:
                 dest = self.findWidgetByName('c0')
-                dx, dy = self.canvas.coords( self.widgetToItem[ dest ] )
+                dx, dy = self.canvas.coords(self.widgetToItem[dest])
                 self.link = self.canvas.create_line(float(x),
                                                     float(y),
                                                     dx,
@@ -1604,9 +1633,9 @@ class MiniEdit( Frame ):
                                                     width=4,
                                                     fill='red',
                                                     dash=(6, 4, 2, 4),
-                                                    tag='link' )
-                c.itemconfig(self.link, tags=c.gettags(self.link)+('control',))
-                self.addLink( icon, dest, linktype='control' )
+                                                    tag='link')
+                c.itemconfig(self.link, tags=c.gettags(self.link) + ('control',))
+                self.addLink(icon, dest, linktype='control')
                 self.createControlLinkBindings()
                 self.link = self.linkWidget = None
 
@@ -1615,16 +1644,16 @@ class MiniEdit( Frame ):
         for link in links:
             srcNode = link['src']
             src = self.findWidgetByName(srcNode)
-            sx, sy = self.canvas.coords( self.widgetToItem[ src ] )
+            sx, sy = self.canvas.coords(self.widgetToItem[src])
 
             destNode = link['dest']
             dest = self.findWidgetByName(destNode)
-            dx, dy = self.canvas.coords( self.widgetToItem[ dest]  )
+            dx, dy = self.canvas.coords(self.widgetToItem[dest])
 
-            self.link = self.canvas.create_line( sx, sy, dx, dy, width=4,
-                                             fill='blue', tag='link' )
-            c.itemconfig(self.link, tags=c.gettags(self.link)+('data',))
-            self.addLink( src, dest, linkopts=link['opts'] )
+            self.link = self.canvas.create_line(sx, sy, dx, dy, width=4,
+                                                fill='blue', tag='link')
+            c.itemconfig(self.link, tags=c.gettags(self.link) + ('data',))
+            self.addLink(src, dest, linkopts=link['opts'])
             self.createDataLinkBindings()
             self.link = self.linkWidget = None
 
@@ -1650,9 +1679,9 @@ class MiniEdit( Frame ):
         self.appPrefs["ipBase"]= self.defaultIpBase
 
     def select_hosts(self, title, max_selection=2):
-        """Abre uma janela para o usuário selecionar hosts."""
+        """Abre uma janela para o usuario selecionar hosts."""
         if not self.net or not self.net.hosts:
-            messagebox.showerror("Erro", "Nenhum host disponível na topologia.")
+            messagebox.showerror("Erro", "Nenhum host disponivel na topologia.")
             return None
 
         # Cria uma janela pop-up
@@ -1660,20 +1689,20 @@ class MiniEdit( Frame ):
         popup.title(title)
         popup.geometry("300x200")
 
-        # Lista de hosts disponíveis
+        # Lista de hosts disponiveis
         Label(popup, text="Selecione os hosts:").pack()
         host_listbox = Listbox(popup, selectmode=MULTIPLE)
         for host in self.net.hosts:
             host_listbox.insert("end", host.name)
         host_listbox.pack()
 
-        # Lista mutável para armazenar os hosts selecionados
+        # Lista mutavel para armazenar os hosts selecionados
         selected_hosts = []
 
         def on_confirm():
             selected_indices = host_listbox.curselection()
             if len(selected_indices) > max_selection:
-                messagebox.showerror("Erro", f"Selecione no máximo {max_selection} hosts.")
+                messagebox.showerror("Erro", f"Selecione no maximo {max_selection} hosts.")
                 return
             selected_hosts.clear()  # Limpa a lista antes de adicionar novos hosts
             selected_hosts.extend([self.net.hosts[i].name for i in selected_indices])
@@ -1681,7 +1710,7 @@ class MiniEdit( Frame ):
 
         Button(popup, text="Confirmar", command=on_confirm).pack()
 
-        # Espera o usuário selecionar os hosts
+        # Espera o usuario selecionar os hosts
         popup.wait_window()
 
         return selected_hosts
@@ -1741,13 +1770,13 @@ class MiniEdit( Frame ):
         messagebox.showinfo("Iperf Resultado", result)
 
     def load_template(self):
-        """Abre uma janela para o usuário selecionar um arquivo .py e carrega o template."""
+        """Abre uma janela para o usuario selecionar um arquivo .py e carrega o template."""
         file_path = filedialog.askopenfilename(
             title="Selecione um template",
             filetypes=[("Python Files", "*.py")]
         )
         if file_path:
-            self.load_py_template(file_path)  # Chama o método para carregar o template
+            self.load_py_template(file_path)  # Chama o metodo para carregar o template
 
     def load_py_template(self, file_path):
         """Carrega e executa um template .py."""
@@ -1757,60 +1786,60 @@ class MiniEdit( Frame ):
             template_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(template_module)
 
-            # Verifica se a função create_topology existe
+            # Verifica se a funcao create_topology existe
             if hasattr(template_module, 'create_topology'):
                 self.clear_topology()  # Limpa a topologia atual
                 template_module.create_topology(self.net)  # Cria a topologia no Mininet
 
-                # Atualiza a interface gráfica
+                # Atualiza a interface grafica
                 self.update_gui_from_mininet()
 
                 print(f"Template carregado com sucesso: {os.path.basename(file_path)}")
             else:
-                print("Erro: O arquivo não contém a função 'create_topology'.")
+                print("Erro: O arquivo nao contem a funcao 'create_topology'.")
         except Exception as e:
             print(f"Erro ao carregar o template: {e}")
 
     def clear_topology(self):
         """Limpa a topologia atual."""
         self.net = Mininet(controller=Controller, switch=OVSSwitch, host=Host)
-        self.node_positions = {}  # Limpa as posições dos nós
+        self.node_positions = {}  # Limpa as posicoes dos nos
         self.canvas.delete("node")
         self.canvas.delete("link")
         print("Topologia limpa.")
 
     def update_gui_from_mininet(self):
-        """Atualiza a interface gráfica com base na topologia do Mininet."""
-        # Limpa a interface gráfica
+        """Atualiza a interface grafica com base na topologia do Mininet."""
+        # Limpa a interface grafica
         self.canvas.delete("node")
         self.canvas.delete("link")
 
-        # Adiciona nós à interface gráfica
-        x, y = 50, 50  # Posição inicial
+        # Adiciona nos a interface grafica
+        x, y = 50, 50  # Posicao inicial
         for node in self.net.hosts:
             self.add_node_to_gui(node.name, x, y)
-            x += 100  # Espaçamento horizontal entre nós
+            x += 100  # Espacamento horizontal entre nos
 
-        # Adiciona links à interface gráfica
+        # Adiciona links a interface grafica
         for link in self.net.links:
             node1, node2 = link.intf1.node.name, link.intf2.node.name
             self.add_link_to_gui(node1, node2)
 
     def add_node_to_gui(self, node_id, x, y):
-        """Adiciona um nó à interface gráfica."""
+        """Adiciona um no a interface grafica."""
         self.canvas.create_oval(x, y, x + 40, y + 40, fill="lightblue", tags="node")
         self.canvas.create_text(x + 20, y + 20, text=node_id, tags="node")
-        self.node_positions[node_id] = (x + 20, y + 20)  # Armazena as coordenadas do nó
+        self.node_positions[node_id] = (x + 20, y + 20)  # Armazena as coordenadas do no
 
     def add_link_to_gui(self, node1, node2):
-        """Adiciona um link à interface gráfica."""
-        x1, y1 = self.get_node_position(node1)  # Obtém as coordenadas do nó 1
-        x2, y2 = self.get_node_position(node2)  # Obtém as coordenadas do nó 2
+        """Adiciona um link a interface grafica."""
+        x1, y1 = self.get_node_position(node1)  # Obtem as coordenadas do no 1
+        x2, y2 = self.get_node_position(node2)  # Obtem as coordenadas do no 2
         self.canvas.create_line(x1, y1, x2, y2, fill="black", tags="link")
 
     def get_node_position(self, node_id):
-        """Obtém as coordenadas de um nó na interface gráfica."""
-        return self.node_positions.get(node_id, (0, 0))  # Retorna (0, 0) se o nó não for encontrado
+        """Obtem as coordenadas de um no na interface grafica."""
+        return self.node_positions.get(node_id, (0, 0))  # Retorna (0, 0) se o no nao for encontrado
     
     def saveTopology( self ):
         "Save command."
