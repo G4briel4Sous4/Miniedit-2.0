@@ -1,7 +1,0 @@
-1.Templates pré-definido
-2.Painel com comandos básicos: iperf, tcpdump e novos de interesse
-3.Obrigatório: painel dumpflow (visão de dados SDN)
-4.Implementar bloqueio de rota e reconciliação
-5.Implementar modelo para detecção de ciclos e execução de VD (mais fácil - kruskal: dump, net, hosts, pingall) ou LS
-6.IPv6 
-7.Captura wireshark/tcpdump
