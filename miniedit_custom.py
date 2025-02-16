@@ -49,6 +49,14 @@ from mininet.moduledeps import moduleDeps
 from mininet.topo import SingleSwitchTopo, LinearTopo, SingleSwitchReversedTopo
 from mininet.topolib import TreeTopo
 
+###########################################################################################################################################################################################
+
+from ipaddress import ip_address, IPv4Address
+
+import networkx as nx
+
+###########################################################################################################################################################################################
+
 # pylint: disable=import-error
 if sys.version_info[0] == 2:
     from Tkinter import ( Frame, Label, LabelFrame, Entry, OptionMenu,
@@ -1197,6 +1205,12 @@ class MiniEdit( Frame ):
 
         # Initialize link tool
         self.link = self.linkWidget = None
+###########################################################################################################################################################################################
+        
+        self.G = nx.Graph()
+        self.cycleDetect = []
+        
+###########################################################################################################################################################################################
 
         # Selection support
         self.selection = None
@@ -1261,6 +1275,11 @@ class MiniEdit( Frame ):
         self.switchCount = 0
         self.controllerCount = 0
         self.net = None
+###########################################################################################################################################################################################
+        
+        self.grafos = {}
+        
+###########################################################################################################################################################################################
 
         # Close window gracefully
         Wm.wm_protocol( self.top, name='WM_DELETE_WINDOW', func=self.quit )
@@ -2627,6 +2646,13 @@ class MiniEdit( Frame ):
         x, y = c.coords( target )
         c.coords( self.link, self.linkx, self.linky, x, y )
         self.addLink( source, dest, linktype=linkType )
+
+###########################################################################################################################################################################################
+        
+        self.G.add_edge(source['text'], dest['text'])
+        
+###########################################################################################################################################################################################
+      
         if linkType == 'control':
             controllerName = ''
             switchName = ''
@@ -2723,8 +2749,17 @@ class MiniEdit( Frame ):
                 widget[ 'text' ] = name
             if len(hostBox.result['defaultRoute']) > 0:
                 newHostOpts['defaultRoute'] = hostBox.result['defaultRoute']
+###########################################################################################################################################################################################
+                
             if len(hostBox.result['ip']) > 0:
-                newHostOpts['ip'] = hostBox.result['ip']
+                try:
+                    ip_type = type(ip_address(hostBox.result['ip']))
+                    if ip_type is IPv4Address: newHostOpts['ip'] = hostBox.result['ip']
+                    else: print('invalid address')
+                except: print('invalid address')
+                
+###########################################################################################################################################################################################
+
             if len(hostBox.result['externalInterfaces']) > 0:
                 newHostOpts['externalInterfaces'] = hostBox.result['externalInterfaces']
             if len(hostBox.result['vlanInterfaces']) > 0:
@@ -2795,6 +2830,38 @@ class MiniEdit( Frame ):
         srcName, dstName = src[ 'text' ], dst[ 'text' ]
         self.net.configLinkStatus(srcName, dstName, 'down')
         self.canvas.itemconfig(link, dash=(4, 4))
+
+###########################################################################################################################################################################################
+        
+    def showWiresharkMenu( self ):
+        if self.selection is None or self.net is None:
+            return
+        
+        link = self.selection
+        linkDetail = self.links[link]
+        
+        src = linkDetail['src']
+        dst = linkDetail['dest']
+        srcName, dstName = src['text'], dst['text']
+        intf = self.net.get(srcName).connectionsTo(self.net.get(dstName))
+        src_intf = intf[0][0]
+        dst_intf = intf[0][1]
+        
+        self.linkWiresharkPopup.delete(0, 'end')
+        
+        self.linkWiresharkPopup.add_command(label=str(src_intf), font=self.font, command=lambda: self.linkWireshark(srcName, str(src_intf)))
+        self.linkWiresharkPopup.add_command(label=str(dst_intf), font=self.font, command=lambda: self.linkWireshark(dstName, str(dst_intf)))
+        
+    def linkWireshark( self, nodeName, nodeIntf ):
+        if ( self.selection is None or
+             self.net is None):
+            return
+        self.net.get(nodeName).cmd("sudo wireshark -i " + nodeIntf + " -k &")
+        
+        
+###########################################################################################################################################################################################
+
+  
 
     def linkDetails( self, _ignore=None ):
         if ( self.selection is None or
@@ -2896,6 +2963,14 @@ class MiniEdit( Frame ):
         if pair is not None:
             source=pair['src']
             dest=pair['dest']
+
+###########################################################################################################################################################################################
+            
+            self.G.remove_edge(source['text'], dest['text'])
+            
+###########################################################################################################################################################################################
+ 
+
             del source.links[ dest ]
             del dest.links[ source ]
             stags = self.canvas.gettags( self.widgetToItem[ source ] )
@@ -2935,6 +3010,15 @@ class MiniEdit( Frame ):
         for link in tuple( widget.links.values() ):
             # Delete from view and model
             self.deleteItem( link )
+
+###########################################################################################################################################################################################
+            
+        if widget['text'] in self.G:
+            self.G.remove_node(widget['text'])
+            
+###########################################################################################################################################################################################
+
+      
         del self.itemToWidget[ item ]
         del self.widgetToItem[ widget ]
 
@@ -3246,6 +3330,18 @@ class MiniEdit( Frame ):
         if self.net is None:
             self.net = self.build()
 
+###########################################################################################################################################################################################
+            
+            self.cycleDetect = list(nx.simple_cycles(self.G))
+            if self.cycleDetect:
+                spn_tree = sorted(nx.minimum_spanning_tree(self.G).edges(data=True))
+                e_list = [e for e in self.G.edges]
+                print("Há ciclos na topologia! A arvore de menor caminho é:")
+                print(sorted(nx.minimum_spanning_tree(self.G).edges(data=True)))
+                    
+###########################################################################################################################################################################################
+
+
             # Since I am going to inject per switch controllers.
             # I can't call net.start().  I have to replicate what it
             # does and add the controller options.
@@ -3305,6 +3401,11 @@ class MiniEdit( Frame ):
         # display the popup menu
         if self.net is None:
             try:
+###########################################################################################################################################################################################
+                
+                self.showWiresharkMenu()
+                
+###########################################################################################################################################################################################
                 self.linkPopup.tk_popup(event.x_root, event.y_root, 0)
             finally:
                 # make sure to release the grab (Tk 8.0a1 only)
