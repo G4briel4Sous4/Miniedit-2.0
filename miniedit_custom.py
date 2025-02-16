@@ -1152,6 +1152,7 @@ class MiniEdit( Frame ):
         self.appPrefs={
             "ipBase": self.defaultIpBase,
             "startCLI": "0",
+            "startSpn": "0",
             "terminalType": 'xterm',
             "switchType": 'ovs',
             "dpctl": '',
