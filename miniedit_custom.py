@@ -55,6 +55,8 @@ from ipaddress import ip_address, IPv4Address
 
 import networkx as nx
 
+import copy
+
 ###########################################################################################################################################################################################
 
 # pylint: disable=import-error
@@ -236,11 +238,25 @@ class PrefsDialog(tkSimpleDialog.Dialog):
         else:
             self.cliButton.select()
 
+###########################################################################################################################################################################################
+
+        # Field for Spanning_tree
+        Label(self.leftfieldFrame, text="Spanning tree kruskal:").grid(row=3, sticky=E)
+        self.spnStart = IntVar()
+        self.spnButton = Checkbutton(self.leftfieldFrame, variable=self.spnStart)
+        self.spnButton.grid(row=3, column=1, sticky=W)
+        if self.prefValues['startSpn'] == '0':
+            self.spnButton.deselect()
+        else:
+            self.spnButton.select()
+            
+###########################################################################################################################################################################################
+        
         # Selection of switch type
-        Label(self.leftfieldFrame, text="Default Switch:").grid(row=3, sticky=E)
+        Label(self.leftfieldFrame, text="Default Switch:").grid(row=4, sticky=E)
         self.switchType = StringVar(self.leftfieldFrame)
         self.switchTypeMenu = OptionMenu(self.leftfieldFrame, self.switchType, "Open vSwitch Kernel Mode", "Indigo Virtual Switch", "Userspace Switch", "Userspace Switch inNamespace")
-        self.switchTypeMenu.grid(row=3, column=1, sticky=W)
+        self.switchTypeMenu.grid(row=4, column=1, sticky=W)
         switchTypePref = self.prefValues['switchType']
         if switchTypePref == 'ivs':
             self.switchType.set("Indigo Virtual Switch")
@@ -254,7 +270,7 @@ class PrefsDialog(tkSimpleDialog.Dialog):
 
         # Fields for OVS OpenFlow version
         ovsFrame= LabelFrame(self.leftfieldFrame, text='Open vSwitch', padx=5, pady=5)
-        ovsFrame.grid(row=4, column=0, columnspan=2, sticky=EW)
+        ovsFrame.grid(row=5, column=0, columnspan=2, sticky=EW)
         Label(ovsFrame, text="OpenFlow 1.0:").grid(row=0, sticky=E)
         Label(ovsFrame, text="OpenFlow 1.1:").grid(row=1, sticky=E)
         Label(ovsFrame, text="OpenFlow 1.2:").grid(row=2, sticky=E)
@@ -293,9 +309,9 @@ class PrefsDialog(tkSimpleDialog.Dialog):
             self.covsOf13.select()
 
         # Field for DPCTL listen port
-        Label(self.leftfieldFrame, text="dpctl port:").grid(row=5, sticky=E)
+        Label(self.leftfieldFrame, text="dpctl port:").grid(row=6, sticky=E)
         self.dpctlEntry = Entry(self.leftfieldFrame)
-        self.dpctlEntry.grid(row=5, column=1)
+        self.dpctlEntry.grid(row=6, column=1)
         if 'dpctl' in self.prefValues:
             self.dpctlEntry.insert(0, self.prefValues['dpctl'])
 
@@ -355,6 +371,9 @@ class PrefsDialog(tkSimpleDialog.Dialog):
         ipBase = self.ipEntry.get()
         terminalType = self.terminalVar.get()
         startCLI = str(self.cliStart.get())
+###########################################################################################################################################################################################
+        startSpn = str(self.spnStart.get())
+###########################################################################################################################################################################################
         sw = self.switchType.get()
         dpctl = self.dpctlEntry.get()
 
@@ -375,7 +394,8 @@ class PrefsDialog(tkSimpleDialog.Dialog):
                        'dpctl':dpctl,
                        'sflow':sflowValues,
                        'netflow':nflowvalues,
-                       'startCLI':startCLI}
+                       'startCLI':startCLI,
+                       'startSpn':startSpn}
         if sw == 'Indigo Virtual Switch':
             self.result['switchType'] = 'ivs'
             if StrictVersion(MININET_VERSION) < StrictVersion('2.1'):
@@ -1209,6 +1229,7 @@ class MiniEdit( Frame ):
         
         self.G = nx.Graph()
         self.cycleDetect = []
+        self.g = []
         
 ###########################################################################################################################################################################################
 
@@ -2819,6 +2840,22 @@ class MiniEdit( Frame ):
         self.net.configLinkStatus(srcName, dstName, 'up')
         self.canvas.itemconfig(link, dash=())
 
+###########################################################################################################################################################################################
+        if self.cycleDetect:
+            self.g.add_edge(srcName, dstName)
+            spn_tree = sorted(nx.minimum_spanning_tree(self.g).edges(data=True))
+            print(spn_tree)
+            e_list = [e for e in self.g.edges]
+            for e in e_list:
+                inSpnTree = 0
+                for s in spn_tree:
+                    if (e[0] in s) and (e[1] in s):
+                        inSpnTree = 1
+                        self.net.configLinkStatus(e[0], e[1], 'up')
+                if inSpnTree == 0: self.net.configLinkStatus(e[0], e[1], 'down')
+###########################################################################################################################################################################################
+
+
     def linkDown( self ):
         if ( self.selection is None or
              self.net is None):
@@ -2830,6 +2867,26 @@ class MiniEdit( Frame ):
         srcName, dstName = src[ 'text' ], dst[ 'text' ]
         self.net.configLinkStatus(srcName, dstName, 'down')
         self.canvas.itemconfig(link, dash=(4, 4))
+
+###########################################################################################################################################################################################        
+        if self.cycleDetect:
+            try:
+                self.g.remove_edge(srcName, dstName)
+                spn_tree = sorted(nx.minimum_spanning_tree(self.g).edges(data=True))
+                print(spn_tree)
+                e_list = [e for e in self.g.edges]
+                for e in e_list:
+                    inSpnTree = 0
+                    for s in spn_tree:
+                        if (e[0] in s) and (e[1] in s):
+                            inSpnTree = 1
+                            self.net.configLinkStatus(e[0], e[1], 'up')
+                    if inSpnTree == 0: self.net.configLinkStatus(e[0], e[1], 'down')
+                print("Queda de link feita com sucesso")
+            except:
+                print("Ja foi realizado o link down neste enlace")
+###########################################################################################################################################################################################
+
 
 ###########################################################################################################################################################################################
         
@@ -3325,6 +3382,23 @@ class MiniEdit( Frame ):
             info( "\n\n NOTE: PLEASE REMEMBER TO EXIT THE CLI BEFORE YOU PRESS THE STOP BUTTON. Not exiting will prevent MiniEdit from quitting and will prevent you from starting the network again during this session.\n\n")
             CLI(self.net)
 
+###########################################################################################################################################################################################
+
+        if self.appPrefs['startSpn'] == '1' and self.cycleDetect:
+                spn_tree = sorted(nx.minimum_spanning_tree(self.G).edges(data=True))
+                e_list = [e for e in self.G.edges]
+                print(sorted(nx.minimum_spanning_tree(self.G).edges(data=True)))
+                for e in e_list:
+                    inSpnTree = 0
+                    for s in spn_tree:
+                        if (e[0] in s) and (e[1] in s):
+                            inSpnTree = 1
+                    if inSpnTree == 0: self.net.configLinkStatus(e[0], e[1], 'down')
+                    
+###########################################################################################################################################################################################
+
+
+
     def start( self ):
         "Start network."
         if self.net is None:
@@ -3333,11 +3407,7 @@ class MiniEdit( Frame ):
 ###########################################################################################################################################################################################
             
             self.cycleDetect = list(nx.simple_cycles(self.G))
-            if self.cycleDetect:
-                spn_tree = sorted(nx.minimum_spanning_tree(self.G).edges(data=True))
-                e_list = [e for e in self.G.edges]
-                print("Há ciclos na topologia! A arvore de menor caminho é:")
-                print(sorted(nx.minimum_spanning_tree(self.G).edges(data=True)))
+            self.g = self.G.copy()
                     
 ###########################################################################################################################################################################################
 
