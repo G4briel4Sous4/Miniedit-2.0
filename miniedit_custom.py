@@ -1279,6 +1279,13 @@ class MiniEdit( Frame ):
         self.linkRunPopup.add_command(label='Link Up', font=self.font, command=self.linkUp )
         self.linkRunPopup.add_command(label='Link Down', font=self.font, command=self.linkDown )
 
+###########################################################################################################################################################################################
+        
+        self.linkWiresharkPopup = Menu(self.top, tearoff=0)
+        self.linkRunPopup.add_cascade(label='Wireshark', font=self.font, menu=self.linkWiresharkPopup)
+        
+###########################################################################################################################################################################################
+
         self.controllerPopup = Menu(self.top, tearoff=0)
         self.controllerPopup.add_command(label='Controller Options', font=self.font)
         self.controllerPopup.add_separator()
