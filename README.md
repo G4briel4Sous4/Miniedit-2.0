@@ -1,5 +1,7 @@
 # Projeto de Melhorias do Miniedit
 
+O projeto atualizado encontra-se no arquivo miniedit_custom_oficial(1).py
+
 ## Integrantes
 - Gabriela de Sousa Peres
 - Henrique Vasconcelos Ribeiro de Oliveira
